@@ -1,0 +1,114 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Połączenie z portalem dostępu",
+        "description": "Wpisz adres portalu i jednorazowy kod zaproszenia od administratora portalu.",
+        "data": {
+          "portal_url": "Adres portalu",
+          "invite_code": "Kod zaproszenia",
+          "name": "Nazwa tego domu"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Brak połączenia z portalem. Sprawdź adres i dostęp do internetu.",
+      "invalid_invite": "Kod zaproszenia jest błędny, wygasł albo został już użyty.",
+      "invalid_url": "Adres musi zaczynać się od https://",
+      "portal_error": "Portal zwrócił nieoczekiwany błąd."
+    },
+    "abort": {
+      "already_configured": "Ten dom jest już połączony."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connection": {
+        "name": "Połączenie z portalem"
+      }
+    }
+  },
+  "selector": {
+    "days": {
+      "options": {
+        "mon": "Poniedziałek",
+        "tue": "Wtorek",
+        "wed": "Środa",
+        "thu": "Czwartek",
+        "fri": "Piątek",
+        "sat": "Sobota",
+        "sun": "Niedziela"
+      }
+    }
+  },
+  "services": {
+    "create_panel": {
+      "name": "Utwórz panel dla gościa",
+      "description": "Tworzy panel z ograniczonym czasem dostępu i zwraca link oraz PIN.",
+      "fields": {
+        "title": {
+          "name": "Tytuł",
+          "description": "Widoczny dla gościa, np. Dostęp dla Marka."
+        },
+        "controls": {
+          "name": "Kontrolki",
+          "description": "Lista encji: entity_id, opcjonalnie name, type (switch/button), action (press, run, unlock, open, toggle, pulse), pulse_seconds, max_uses."
+        },
+        "pin": {
+          "name": "PIN",
+          "description": "4–8 cyfr. Jeśli puste, losowe 4 cyfry."
+        },
+        "valid_from": {
+          "name": "Ważny od",
+          "description": "Początek dostępu. Jeśli puste, od teraz."
+        },
+        "valid_until": {
+          "name": "Ważny do",
+          "description": "Koniec dostępu. Podaj to albo czas trwania."
+        },
+        "duration": {
+          "name": "Czas trwania",
+          "description": "Długość dostępu od startu. 24 godziny, jeśli nie podasz ani tego, ani daty końca."
+        },
+        "days": {
+          "name": "Dni",
+          "description": "Dni tygodnia, w które dostęp działa. Jeśli puste, codziennie."
+        },
+        "time_from": {
+          "name": "Od godziny (GG:MM)",
+          "description": "Codzienny początek godzin dostępu."
+        },
+        "time_to": {
+          "name": "Do godziny (GG:MM)",
+          "description": "Codzienny koniec godzin dostępu. Może być wcześniejszy niż początek, np. dostęp nocny."
+        },
+        "language": {
+          "name": "Język",
+          "description": "Domyślny język strony gościa."
+        },
+        "notify": {
+          "name": "Pokaż powiadomienie",
+          "description": "Pokaż link i PIN jako powiadomienie w Home Assistancie."
+        },
+        "config_entry_id": {
+          "name": "Połączenie z portalem",
+          "description": "Potrzebne tylko przy więcej niż jednym połączeniu."
+        }
+      }
+    },
+    "revoke_panel": {
+      "name": "Unieważnij panel gościa",
+      "description": "Natychmiast kończy dostęp.",
+      "fields": {
+        "panel_id": {
+          "name": "ID panelu",
+          "description": "Zwracane przez Utwórz panel dla gościa."
+        },
+        "config_entry_id": {
+          "name": "Połączenie z portalem",
+          "description": "Potrzebne tylko przy więcej niż jednym połączeniu."
+        }
+      }
+    }
+  }
+}

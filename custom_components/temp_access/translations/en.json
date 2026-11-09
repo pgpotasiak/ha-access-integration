@@ -1,0 +1,114 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to the access portal",
+        "description": "Enter the portal address and the one-time invite code you received from the portal administrator.",
+        "data": {
+          "portal_url": "Portal address",
+          "invite_code": "Invite code",
+          "name": "Name of this home"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the portal. Check the address and your internet connection.",
+      "invalid_invite": "The invite code is wrong, expired or already used.",
+      "invalid_url": "The address must start with https://",
+      "portal_error": "The portal returned an unexpected error."
+    },
+    "abort": {
+      "already_configured": "This home is already connected."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connection": {
+        "name": "Portal connection"
+      }
+    }
+  },
+  "selector": {
+    "days": {
+      "options": {
+        "mon": "Monday",
+        "tue": "Tuesday",
+        "wed": "Wednesday",
+        "thu": "Thursday",
+        "fri": "Friday",
+        "sat": "Saturday",
+        "sun": "Sunday"
+      }
+    }
+  },
+  "services": {
+    "create_panel": {
+      "name": "Create guest panel",
+      "description": "Creates a time-limited panel and returns its link and PIN.",
+      "fields": {
+        "title": {
+          "name": "Title",
+          "description": "Shown to the guest, e.g. Access for Mark."
+        },
+        "controls": {
+          "name": "Controls",
+          "description": "List of entities: entity_id, optional name, type (switch/button), action (press, run, unlock, open, toggle, pulse), pulse_seconds, max_uses."
+        },
+        "pin": {
+          "name": "PIN",
+          "description": "4–8 digits. Random 4 digits if empty."
+        },
+        "valid_from": {
+          "name": "Valid from",
+          "description": "Start of access. Now if empty."
+        },
+        "valid_until": {
+          "name": "Valid until",
+          "description": "End of access. Use this or duration."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Length of access from the start. 24 hours if neither this nor valid until is set."
+        },
+        "days": {
+          "name": "Days",
+          "description": "Days of the week when access works. Every day if empty."
+        },
+        "time_from": {
+          "name": "From (HH:MM)",
+          "description": "Daily start of access hours."
+        },
+        "time_to": {
+          "name": "To (HH:MM)",
+          "description": "Daily end of access hours. May be earlier than From for overnight access."
+        },
+        "language": {
+          "name": "Language",
+          "description": "Default language of the guest page."
+        },
+        "notify": {
+          "name": "Show notification",
+          "description": "Show the link and PIN as a notification in Home Assistant."
+        },
+        "config_entry_id": {
+          "name": "Portal connection",
+          "description": "Only needed with more than one portal connection."
+        }
+      }
+    },
+    "revoke_panel": {
+      "name": "Revoke guest panel",
+      "description": "Ends access immediately.",
+      "fields": {
+        "panel_id": {
+          "name": "Panel ID",
+          "description": "Returned by Create guest panel."
+        },
+        "config_entry_id": {
+          "name": "Portal connection",
+          "description": "Only needed with more than one portal connection."
+        }
+      }
+    }
+  }
+}

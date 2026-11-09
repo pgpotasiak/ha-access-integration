@@ -1,0 +1,13 @@
+{
+  "domain": "temp_access",
+  "name": "Temporary Access",
+  "codeowners": ["@pgpotasiak"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/pgpotasiak/ha-access-integration",
+  "integration_type": "service",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/pgpotasiak/ha-access-integration/issues",
+  "requirements": [],
+  "version": "0.2.0"
+}

@@ -1,0 +1,80 @@
+create_panel:
+  fields:
+    title:
+      required: true
+      example: "Dostęp dla Marka"
+      selector:
+        text:
+    controls:
+      required: true
+      example: |
+        - entity_id: light.garaz
+          name: Światło garaż
+        - entity_id: switch.brama
+          name: Brama wjazdowa
+          type: button
+          action: pulse
+          max_uses: 3
+      selector:
+        object:
+    pin:
+      example: "4821"
+      selector:
+        text:
+    valid_from:
+      selector:
+        datetime:
+    valid_until:
+      selector:
+        datetime:
+    duration:
+      example: "24:00:00"
+      selector:
+        duration:
+          enable_day: true
+    days:
+      selector:
+        select:
+          multiple: true
+          options:
+            - mon
+            - tue
+            - wed
+            - thu
+            - fri
+            - sat
+            - sun
+          translation_key: days
+    time_from:
+      example: "08:00"
+      selector:
+        text:
+    time_to:
+      example: "16:00"
+      selector:
+        text:
+    language:
+      default: pl
+      selector:
+        select:
+          options:
+            - pl
+            - en
+    notify:
+      default: true
+      selector:
+        boolean:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: temp_access
+revoke_panel:
+  fields:
+    panel_id:
+      required: true
+      selector:
+        text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: temp_access
