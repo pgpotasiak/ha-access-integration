@@ -1,0 +1,28 @@
+{
+  "entity": {
+    "binary_sensor": { "connection": { "default": "mdi:cloud-check-variant", "state": { "off": "mdi:cloud-off" } } },
+    "sensor": {
+      "status": {
+        "default": "mdi:shield-key",
+        "state": {
+          "active": "mdi:shield-check",
+          "not_started": "mdi:timer-sand",
+          "outside_schedule": "mdi:clock-alert-outline",
+          "expired": "mdi:shield-off-outline",
+          "revoked": "mdi:shield-remove",
+          "locked": "mdi:shield-lock"
+        }
+      },
+      "valid_until": { "default": "mdi:calendar-clock" },
+      "link": { "default": "mdi:link-variant" },
+      "pin": { "default": "mdi:dialpad" },
+      "last_action": { "default": "mdi:gesture-tap" }
+    },
+    "button": { "revoke": { "default": "mdi:link-variant-off" } },
+    "image": { "qr": { "default": "mdi:qrcode" } }
+  },
+  "services": {
+    "create_panel": { "service": "mdi:account-key" },
+    "revoke_panel": { "service": "mdi:link-variant-off" }
+  }
+}

@@ -35,7 +35,7 @@ class PortalConnectionSensor(BinarySensorEntity):
             identifiers={(DOMAIN, hub.instance_id)},
             name=entry.title,
             manufacturer="Temporary Access",
-            model="Portal connection",
+            model="Portal",
             entry_type=DeviceEntryType.SERVICE,
             configuration_url=hub.api.base_url,
         )

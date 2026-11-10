@@ -21,11 +21,134 @@
       "already_configured": "Ten dom jest już połączony."
     }
   },
+  "config_subentries": {
+    "panel": {
+      "entry_type": "Panel gościa",
+      "initiate_flow": {
+        "user": "Dodaj panel gościa"
+      },
+      "step": {
+        "user": {
+          "title": "Nowy panel gościa",
+          "description": "Gość dostanie link i PIN, którymi przez wybrany czas steruje wybranymi encjami. W następnych krokach ustawisz każdą encję.",
+          "data": {
+            "title": "Tytuł",
+            "entities": "Encje dla gościa",
+            "start": "Początek dostępu",
+            "duration": "Czas trwania",
+            "days": "Tylko w dni",
+            "time_from": "Od godziny",
+            "time_to": "Do godziny",
+            "pin": "PIN",
+            "language": "Język strony gościa"
+          },
+          "data_description": {
+            "title": "Widoczny dla gościa, np. Dostęp dla Marka.",
+            "start": "Puste oznacza: od teraz.",
+            "days": "Puste oznacza: codziennie.",
+            "time_from": "Godziny dostępu w każdy dozwolony dzień. Puste oznacza: całą dobę.",
+            "time_to": "Może być wcześniej niż godzina początku, np. dostęp nocny 22:00–6:00.",
+            "pin": "4–8 cyfr. Puste oznacza: losowe 4 cyfry."
+          }
+        },
+        "control": {
+          "title": "Kontrolka {index} z {total}: {entity}",
+          "description": "Jak gość ma sterować encją `{entity_id}`?",
+          "data": {
+            "name": "Nazwa dla gościa",
+            "type": "Rodzaj",
+            "action": "Działanie przycisku",
+            "pulse_seconds": "Długość impulsu",
+            "max_uses": "Limit użyć"
+          },
+          "data_description": {
+            "type": "Przełącznik ma przyciski Włącz i Wyłącz. Przycisk wymaga przytrzymania przez sekundę, np. dla bramy.",
+            "action": "Dotyczy tylko rodzaju Przycisk.",
+            "pulse_seconds": "Dla działania Impuls: jak długo encja ma być włączona.",
+            "max_uses": "Puste oznacza: bez limitu."
+          }
+        }
+      },
+      "error": {
+        "no_entities": "Wybierz co najmniej jedną encję.",
+        "too_many": "Panel może mieć najwyżej 20 kontrolek.",
+        "bad_duration": "Czas trwania musi wynosić co najmniej minutę.",
+        "bad_pin": "PIN musi mieć od 4 do 8 cyfr.",
+        "hours_pair": "Podaj obie godziny (od i do) albo żadnej.",
+        "hours_equal": "Godziny od i do muszą się różnić.",
+        "bad_dates": "Panel musi kończyć się w przyszłości.",
+        "portal_error": "Portal odrzucił panel. Sprawdź dziennik HA.",
+        "cannot_connect": "Brak połączenia z portalem. Spróbuj ponownie za chwilę.",
+        "bad_domain": "Tej encji nie można udostępnić gościom.",
+        "not_found": "Encja nie istnieje.",
+        "button_only": "Ta encja może być tylko przyciskiem.",
+        "bad_action": "Wybierz działanie przycisku."
+      },
+      "abort": {
+        "not_loaded": "Integracja nie jest uruchomiona. Sprawdź połączenie z portalem."
+      }
+    }
+  },
   "entity": {
     "binary_sensor": {
       "connection": {
         "name": "Połączenie z portalem"
       }
+    },
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "active": "Aktywny",
+          "not_started": "Jeszcze nieaktywny",
+          "outside_schedule": "Poza godzinami",
+          "expired": "Wygasł",
+          "revoked": "Unieważniony",
+          "locked": "Zablokowany (zły PIN)"
+        },
+        "state_attributes": {
+          "valid_from": {
+            "name": "Ważny od"
+          },
+          "failed_pin_attempts": {
+            "name": "Błędne PIN-y"
+          },
+          "days": {
+            "name": "Dni"
+          },
+          "hours": {
+            "name": "Godziny"
+          }
+        }
+      },
+      "valid_until": {
+        "name": "Ważny do"
+      },
+      "link": {
+        "name": "Link"
+      },
+      "pin": {
+        "name": "PIN"
+      },
+      "last_action": {
+        "name": "Ostatnia akcja gościa"
+      }
+    },
+    "button": {
+      "revoke": {
+        "name": "Unieważnij"
+      }
+    },
+    "image": {
+      "qr": {
+        "name": "Kod QR"
+      }
+    }
+  },
+  "issues": {
+    "disconnected": {
+      "title": "Brak połączenia z portalem dostępu",
+      "description": "„{name}” od ponad 15 minut nie może połączyć się z portalem {url}. Goście nie mogą teraz sterować urządzeniami. Sprawdź połączenie z internetem; integracja sama ponawia próby."
     }
   },
   "selector": {
@@ -38,6 +161,28 @@
         "fri": "Piątek",
         "sat": "Sobota",
         "sun": "Niedziela"
+      }
+    },
+    "language": {
+      "options": {
+        "pl": "Polski",
+        "en": "English"
+      }
+    },
+    "control_type": {
+      "options": {
+        "switch": "Przełącznik (Włącz / Wyłącz)",
+        "button": "Przycisk (przytrzymaj, aby uruchomić)"
+      }
+    },
+    "button_action": {
+      "options": {
+        "press": "Naciśnij",
+        "run": "Uruchom",
+        "unlock": "Odblokuj",
+        "open": "Otwórz",
+        "toggle": "Przełącz",
+        "pulse": "Impuls (włącz na chwilę)"
       }
     }
   },

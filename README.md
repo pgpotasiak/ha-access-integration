@@ -4,7 +4,7 @@ Integracja pozwala wysłać gościowi link z PIN-em, którym przez określony cz
 
 Do działania potrzebny jest portal ([ha-access-portal](https://github.com/pgpotasiak/ha-access-portal)) i jednorazowy kod zaproszenia od jego administratora.
 
-Stan: **etap 2**. Panele tworzy się akcją (usługą); formularz w interfejsie HA pojawi się w etapie 4.
+Stan: **etap 4**. Panele tworzy się formularzem w interfejsie HA albo akcją `temp_access.create_panel`. Wymaga Home Assistanta 2025.6 lub nowszego.
 
 ## Instalacja
 
@@ -16,9 +16,35 @@ Stan: **etap 2**. Panele tworzy się akcją (usługą); formularz w interfejsie 
 
 *Ustawienia → Urządzenia i usługi → Dodaj integrację → Temporary Access.* Podaj adres portalu, kod zaproszenia i nazwę domu. Po chwili encja **Połączenie z portalem** powinna pokazać stan *Połączono*.
 
-## Tworzenie panelu
+## Tworzenie panelu w interfejsie
 
-*Narzędzia deweloperskie → Akcje → Temporary Access: Utwórz panel dla gościa*, w trybie YAML:
+*Ustawienia → Urządzenia i usługi → Temporary Access* → przycisk **Dodaj panel gościa** (przy wpisie integracji, menu ⋮ albo przycisk na górze listy wpisów).
+
+1. Pierwszy krok: tytuł, encje dla gościa, czas trwania, opcjonalnie początek dostępu, dni tygodnia, godziny i PIN.
+2. Potem krótki krok dla każdej encji: nazwa widoczna dla gościa, rodzaj (przełącznik albo przycisk), działanie przycisku, długość impulsu i limit użyć.
+
+Link i PIN pojawią się w powiadomieniach. Każdy panel staje się osobnym urządzeniem w HA.
+
+## Panel w Home Assistancie
+
+Urządzenie panelu ma encje:
+
+| Encja | Zawartość |
+| --- | --- |
+| Status | Aktywny, Jeszcze nieaktywny, Poza godzinami, Wygasł, Unieważniony albo Zablokowany (zły PIN); w atrybutach liczba błędnych PIN-ów i pozostałe użycia |
+| Ważny do | Koniec dostępu |
+| Ostatnia akcja gościa | Np. „Gość włączył: Światło garaż”; historia tej encji to dziennik działań gościa |
+| Kod QR | Link do panelu jako kod QR, gotowy do pokazania gościowi |
+| Link, PIN | Do skopiowania (w sekcji Diagnostyka) |
+| Unieważnij | Natychmiast kończy dostęp |
+
+Każde działanie gościa trafia też do dziennika HA i do aktywności urządzenia panelu. **Usunięcie** urządzenia panelu (menu ⋮ → Usuń) unieważnia panel w portalu. Panele, które wygasły ponad 7 dni temu, są usuwane automatycznie.
+
+Jeśli połączenie z portalem nie działa dłużej niż 15 minut, w *Ustawienia → Naprawy* pojawi się zgłoszenie.
+
+## Tworzenie panelu akcją
+
+Przydatne w skryptach i automatyzacjach. *Narzędzia deweloperskie → Akcje*, w trybie YAML:
 
 ```yaml
 action: temp_access.create_panel
@@ -84,7 +110,7 @@ data:
   panel_id: P9UFCJSv90vd
 ```
 
-Unieważnienie działa w Home Assistancie od razu, nawet gdy portal jest niedostępny.
+Prościej: przycisk **Unieważnij** na urządzeniu panelu. Unieważnienie działa w Home Assistancie od razu, nawet gdy portal jest niedostępny.
 
 ## Bezpieczeństwo
 

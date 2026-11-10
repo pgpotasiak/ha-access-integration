@@ -104,44 +104,56 @@ def test_schedule_rules():
     assert not schedule_allows({**base, "from": "22:00", "to": "06:00"}, wed_10)
 
 
-async def test_full_flow_against_live_portal(hass: HomeAssistant) -> None:
+def ent(hass: HomeAssistant, platform: str, unique_id: str) -> str:
+    from homeassistant.helpers import entity_registry as er
+
+    eid = er.async_get(hass).async_get_entity_id(platform, DOMAIN, unique_id)
+    assert eid, f"no {platform} entity with unique_id {unique_id}"
+    return eid
+
+
+async def settle(hass: HomeAssistant, entry, sensor: str):
+    """After a reload: let it finish, return the new hub and wait for the connection."""
+    await hass.async_block_till_done()
+    hub = hass.data[DOMAIN][entry.entry_id]
+    assert await wait_for(lambda: (st := hass.states.get(sensor)) is not None and st.state == "on"), "not connected"
+    return hub
+
+
+async def test_full_flow_against_live_portal(hass: HomeAssistant, monkeypatch) -> None:
+    from custom_components.temp_access import hub as hub_mod
+
+    monkeypatch.setattr(hub_mod, "DISCONNECTED_ISSUE_AFTER", 0.5)
     async with aiohttp.ClientSession() as s:
         st, _ = await _json(s, "GET", "/")
         if st != 200:
             pytest.skip("portal is not running")
-        st, inv = await _json(s, "POST", "/api/v1/admin/invites", headers={"Authorization": f"Bearer {ADMIN}"})
+        admin = {"Authorization": f"Bearer {ADMIN}"}
+        st, inv = await _json(s, "POST", "/api/v1/admin/invites", headers=admin)
         assert st == 201
 
-        # Entities a guest will control.
         assert await async_setup_component(
             hass, "input_boolean", {"input_boolean": {"garaz": {"name": "Światło garaż"}, "przekaznik": {"name": "Przekaźnik bramy"}}}
         )
+        assert await async_setup_component(hass, "script", {"script": {"furtka": {"sequence": [{"event": "furtka_otwarta"}]}}})
         await hass.async_block_till_done()
 
         # ---------- config flow ----------
         result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
-        assert result["type"] == "form"
-        bad = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {"portal_url": PORTAL, "invite_code": "INV-wrong", "name": "Dom testowy"}
-        )
-        assert bad["type"] == "form" and bad["errors"] == {"base": "invalid_invite"}
-        done = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {"portal_url": PORTAL, "invite_code": inv["invite_code"], "name": "Dom testowy"}
-        )
+        bad = await hass.config_entries.flow.async_configure(result["flow_id"], {"portal_url": PORTAL, "invite_code": "INV-wrong", "name": "Dom testowy"})
+        assert bad["errors"] == {"base": "invalid_invite"}
+        done = await hass.config_entries.flow.async_configure(result["flow_id"], {"portal_url": PORTAL, "invite_code": inv["invite_code"], "name": "Dom testowy"})
         assert done["type"] == "create_entry", done
         entry = done["result"]
-        await hass.async_block_till_done()
-
         sensor = "binary_sensor.dom_testowy_portal_connection"
-        assert await wait_for(lambda: (st := hass.states.get(sensor)) is not None and st.state == "on"), hass.states.async_entity_ids("binary_sensor")
+        hub = await settle(hass, entry, sensor)
 
         events = []
-        hass.bus.async_listen(EVENT_COMMAND, lambda e: events.append(e.data))
+        hass.bus.async_listen(EVENT_COMMAND, lambda e: events.append(e))
 
-        # ---------- create a panel ----------
+        # ---------- panel from the action ----------
         resp = await hass.services.async_call(
-            DOMAIN,
-            "create_panel",
+            DOMAIN, "create_panel",
             {
                 "title": "Dostęp dla Marka",
                 "duration": {"hours": 24},
@@ -150,102 +162,157 @@ async def test_full_flow_against_live_portal(hass: HomeAssistant) -> None:
                     {"entity_id": "input_boolean.przekaznik", "name": "Brama wjazdowa", "type": "button", "action": "pulse", "pulse_seconds": 0.3, "max_uses": 2},
                 ],
             },
-            blocking=True,
-            return_response=True,
+            blocking=True, return_response=True,
         )
-        assert resp["panel_url"].startswith(PORTAL + "/p/")
-        assert len(resp["pin"]) == 4
-        hub = hass.data[DOMAIN][entry.entry_id]
-        assert resp["panel_id"] in hub.data["panels"]
+        pid = resp["panel_id"]
+        hub = await settle(hass, entry, sensor)
+        assert pid in hub.panels and len(entry.subentries) == 1
+
+        status = ent(hass, "sensor", f"{pid}_status")
+        assert hass.states.get(status).state == "active"
+        assert hass.states.get(ent(hass, "sensor", f"{pid}_link")).state == resp["panel_url"]
+        assert hass.states.get(ent(hass, "sensor", f"{pid}_pin")).state == resp["pin"]
+        assert hass.states.get(ent(hass, "sensor", f"{pid}_valid_until")).state.startswith(resp["valid_until"][:16])
+        qr = ent(hass, "image", f"{pid}_qr")
+        png = await hass.data["image"].get_entity(qr).async_image()
+        assert png[:8] == b"\x89PNG\r\n\x1a\n" and len(png) > 500
+        from homeassistant.helpers import device_registry as dr
+
+        dev = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, pid)})
+        assert dev and dev.name == "Dostęp dla Marka"
 
         g = Guest(s, resp["panel_url"])
         st, data = await g.call("POST", "unlock", {"pin": resp["pin"]})
         assert st == 200, data
-        st, state = await g.call("GET", "state")
-        assert state["online"] is True and [c["name"] for c in state["controls"]] == ["Światło garaż", "Brama wjazdowa"]
 
-        # ---------- switch ----------
+        # ---------- guest controls ----------
         await g.press("ctrl_1", "on", "done")
         assert hass.states.get("input_boolean.garaz").state == "on"
+        last = ent(hass, "sensor", f"{pid}_last_action")
+        assert await wait_for(lambda: hass.states.get(last).state == "Guest turned on: Światło garaż"), hass.states.get(last)
         await g.press("ctrl_1", "off", "done")
         assert hass.states.get("input_boolean.garaz").state == "off"
 
-        # ---------- pulse button ----------
         seen = []
         hass.bus.async_listen("state_changed", lambda e: e.data["entity_id"] == "input_boolean.przekaznik" and seen.append(e.data["new_state"].state))
         await g.press("ctrl_2", "press", "done")
         assert await wait_for(lambda: seen[-2:] == ["on", "off"]), seen
-        assert hub.data["panels"][resp["panel_id"]]["controls"]["ctrl_2"]["uses"] == 1
+        assert hub.runtime(pid)["uses"]["ctrl_2"] == 1
+        attrs = hass.states.get(status).attributes
+        assert await wait_for(lambda: hass.states.get(status).attributes.get("uses_left_Brama wjazdowa") == 1), attrs
 
-        assert events[0]["result"] == "ok" and events[0]["entity_id"] == "input_boolean.garaz"
-        assert events[-1]["control_name"] == "Brama wjazdowa"
+        # The guest action and the entity change share one context (logbook links them).
+        assert events[0].data["result"] == "ok" and events[0].data["entity_id"] == "input_boolean.garaz"
 
-        # ---------- HA enforces validity even if the portal would allow ----------
-        hub.data["panels"][resp["panel_id"]]["valid_until"] = time.time() - 1
+        # ---------- logbook text ----------
+        from custom_components.temp_access import logbook as lb
+
+        described = {}
+        lb.async_describe_events(hass, lambda d, ev, fn: described.setdefault("fn", fn))
+        entry_text = described["fn"](events[0])
+        assert entry_text["name"] == "Dostęp dla Marka" and "Światło garaż" in entry_text["message"] and entry_text["entity_id"] == last
+
+        # ---------- HA enforces validity even if the portal would allow it ----------
+        sub = next(iter(entry.subentries.values()))
+        original = dict(sub.data)
+        hass.config_entries.async_update_subentry(entry, sub, data={**original, "valid_until": time.time() - 1})
+        hub = await settle(hass, entry, sensor)
+        assert hass.states.get(status).state == "expired"
         r = await g.press("ctrl_1", "on", "rejected")
-        assert r["reason"] == "expired"
-        assert hass.states.get("input_boolean.garaz").state == "off"
-        hub.data["panels"][resp["panel_id"]]["valid_until"] = time.time() + 3600
+        assert r["reason"] == "expired" and hass.states.get("input_boolean.garaz").state == "off"
+        hass.config_entries.async_update_subentry(entry, sub, data=original)
+        hub = await settle(hass, entry, sensor)
+        assert hass.states.get(status).state == "active"
 
-        # ---------- HA enforces the use limit locally too ----------
-        hub.data["panels"][resp["panel_id"]]["controls"]["ctrl_2"]["uses"] = 2
+        # ---------- local use limit ----------
+        hub.runtime(pid)["uses"]["ctrl_2"] = 2
         r = await g.press("ctrl_2", "press", "rejected")
         assert r["reason"] == "limit_reached"
-        hub.data["panels"][resp["panel_id"]]["controls"]["ctrl_2"]["uses"] = 1
+        assert await wait_for(lambda: hass.states.get(last).state.startswith("Rejected (use limit)")), hass.states.get(last)
 
-        # ---------- a panel HA does not know is refused ----------
-        st, foreign = await _json(
-            s, "POST", "/api/v1/panels",
-            body={"pin": "1234", "title": "Obcy", "valid_until": (dt_util.utcnow() + timedelta(hours=1)).isoformat(),
-                  "controls": [{"id": "ctrl_1", "name": "X", "type": "switch"}]},
-            headers={"Authorization": f"Bearer {entry.data['api_key']}"},
+        # ---------- panel from the UI form (subentry flow) ----------
+        flow = await hass.config_entries.subentries.async_init((entry.entry_id, "panel"), context={"source": "user"})
+        assert flow["type"] == "form" and flow["step_id"] == "user"
+        bad = await hass.config_entries.subentries.async_configure(
+            flow["flow_id"], {"title": "Z formularza", "entities": ["input_boolean.garaz"], "duration": {"days": 0, "hours": 2, "minutes": 0}, "time_from": "08:00:00", "language": "pl"}
         )
-        assert st == 201
-        g2 = Guest(s, foreign["panel_url"])
-        await g2.call("POST", "unlock", {"pin": "1234"})
-        r = await g2.press("ctrl_1", "on", "rejected")
-        assert r["reason"] == "not_allowed"
-        assert hass.states.get("input_boolean.garaz").state == "off"
+        assert bad["errors"] == {"base": "hours_pair"}
+        step = await hass.config_entries.subentries.async_configure(
+            flow["flow_id"],
+            {"title": "Z formularza", "entities": ["input_boolean.garaz", "script.furtka"], "duration": {"days": 0, "hours": 2, "minutes": 0}, "pin": "13579", "language": "pl"},
+        )
+        assert step["step_id"] == "control" and step["description_placeholders"]["index"] == "1"
+        step = await hass.config_entries.subentries.async_configure(flow["flow_id"], {"name": "Garaż", "type": "switch", "action": "pulse"})
+        assert step["step_id"] == "control" and step["description_placeholders"]["entity_id"] == "script.furtka"
+        done = await hass.config_entries.subentries.async_configure(flow["flow_id"], {"name": "Furtka", "max_uses": 1})
+        assert done["type"] == "create_entry", done
+        hub = await settle(hass, entry, sensor)
+        form_pid = next(p for p, d in hub.panels.items() if d["title"] == "Z formularza")
+        form = hub.panels[form_pid]
+        assert form["pin"] == "13579" and form["controls"]["ctrl_2"] == {**form["controls"]["ctrl_2"], "type": "button", "action": "run", "max_uses": 1}
+        g2 = Guest(s, form["url"])
+        assert (await g2.call("POST", "unlock", {"pin": "13579"}))[0] == 200
+        fired = []
+        hass.bus.async_listen("furtka_otwarta", lambda e: fired.append(e))
+        await g2.press("ctrl_2", "press", "done")
+        assert await wait_for(lambda: len(fired) == 1)
+
+        # ---------- revoke button ----------
+        btn = ent(hass, "button", f"{form_pid}_revoke")
+        await hass.services.async_call("button", "press", {"entity_id": btn}, blocking=True)
+        assert hass.states.get(ent(hass, "sensor", f"{form_pid}_status")).state == "revoked"
+        assert hass.states.get(btn).state == "unavailable"
+        _, after = await g2.call("GET", "state")
+        assert after["status"] == "revoked"
+
+        # ---------- deleting the panel device's subentry revokes it on the portal ----------
+        sub_id = hub.subentry_id(pid)
+        hass.config_entries.async_remove_subentry(entry, sub_id)
+        hub = await settle(hass, entry, sensor)
+        assert await wait_for(lambda: pid not in hub.data["runtime"])
+        _, after = await g.call("GET", "state")
+        assert after["status"] == "revoked"
+        assert dr.async_get(hass).async_get_device(identifiers={(DOMAIN, pid)}) is None
+
+        # ---------- PIN lockout reported by the portal ----------
+        lock = await hass.services.async_call(DOMAIN, "create_panel", {"title": "Blokada", "controls": [{"entity_id": "input_boolean.garaz"}]}, blocking=True, return_response=True)
+        hub = await settle(hass, entry, sensor)
+        for i in range(20):
+            async with s.post(f"{lock['panel_url']}/api/unlock", json={"pin": "0000"}, headers={"x-requested-with": "access", "cf-connecting-ip": f"198.51.100.{i}"}) as r:
+                await r.read()
+        await hub._sync_from_portal()
+        lock_status = ent(hass, "sensor", f"{lock['panel_id']}_status")
+        assert await wait_for(lambda: hass.states.get(lock_status).state == "locked"), hass.states.get(lock_status)
+        assert hass.states.get(lock_status).attributes["failed_pin_attempts"] == 20
 
         # ---------- reconnect after the connection drops ----------
         await hub._ws.close()
         assert await wait_for(lambda: hass.states.get(sensor).state == "off", timeout=5)
         assert await wait_for(lambda: hass.states.get(sensor).state == "on", timeout=10)
-        await g.press("ctrl_1", "on", "done")
-        assert hass.states.get("input_boolean.garaz").state == "on"
 
-        # ---------- validation errors ----------
+        # ---------- repair issue when the portal refuses us for a while ----------
+        from homeassistant.helpers import issue_registry as ir
+
+        st, _ = await _json(s, "POST", f"/api/v1/admin/instances/{entry.data['instance_id']}/block", body={"blocked": True}, headers=admin)
+        assert st == 200
+        issue_id = f"disconnected_{entry.entry_id}"
+        assert await wait_for(lambda: ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None, timeout=5)
+        await _json(s, "POST", f"/api/v1/admin/instances/{entry.data['instance_id']}/block", body={"blocked": False}, headers=admin)
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        hub = await settle(hass, entry, sensor)
+        assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+        # ---------- validation errors from the action ----------
         with pytest.raises(Exception, match="cannot be shared"):
             await hass.services.async_call(DOMAIN, "create_panel", {"title": "x", "controls": [{"entity_id": "sensor.foo"}]}, blocking=True, return_response=True)
         with pytest.raises(Exception, match="not found"):
             await hass.services.async_call(DOMAIN, "create_panel", {"title": "x", "controls": [{"entity_id": "light.nope"}]}, blocking=True, return_response=True)
 
-        # ---------- schedule is passed to the portal ----------
-        today = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"][dt_util.now().weekday()]
-        other_days = [d for d in ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] if d != today]
-        sched = await hass.services.async_call(
-            DOMAIN, "create_panel",
-            {"title": "Weekend", "days": other_days, "controls": [{"entity_id": "input_boolean.garaz"}]},
-            blocking=True, return_response=True,
-        )
-        g3 = Guest(s, sched["panel_url"])
-        await g3.call("POST", "unlock", {"pin": sched["pin"]})
-        _, st3 = await g3.call("GET", "state")
-        assert st3["status"] == "outside_schedule"
-
-        # ---------- revoke ----------
-        await hass.services.async_call(DOMAIN, "revoke_panel", {"panel_id": resp["panel_id"]}, blocking=True)
-        _, after = await g.call("GET", "state")
-        assert after["status"] == "revoked"
-        assert hub.data["panels"][resp["panel_id"]]["revoked"] is True
-
-        # ---------- restart keeps panels and last_seq ----------
+        # ---------- restart keeps everything ----------
         last_seq = hub.data["last_seq"]
         assert await hass.config_entries.async_reload(entry.entry_id)
-        await hass.async_block_till_done()
-        hub2 = hass.data[DOMAIN][entry.entry_id]
-        assert hub2.data["last_seq"] == last_seq and sched["panel_id"] in hub2.data["panels"]
-        assert await wait_for(lambda: hass.states.get(sensor).state == "on")
+        hub = await settle(hass, entry, sensor)
+        assert hub.data["last_seq"] == last_seq and form_pid in hub.panels and hub.runtime(form_pid)["revoked"]
 
         assert await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()

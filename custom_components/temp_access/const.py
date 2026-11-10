@@ -48,3 +48,19 @@ ALLOWED_DOMAINS = SWITCH_DOMAINS | set(BUTTON_DEFAULT_ACTION)
 DEFAULT_PULSE_SECONDS = 1.0
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+SUBENTRY_PANEL = "panel"
+SIGNAL_PANEL = f"{DOMAIN}_panel"  # + _<panel_id>
+
+STATUS_ACTIVE = "active"
+STATUS_NOT_STARTED = "not_started"
+STATUS_OUTSIDE = "outside_schedule"
+STATUS_EXPIRED = "expired"
+STATUS_REVOKED = "revoked"
+STATUS_LOCKED = "locked"
+STATUSES = [STATUS_ACTIVE, STATUS_NOT_STARTED, STATUS_OUTSIDE, STATUS_EXPIRED, STATUS_REVOKED, STATUS_LOCKED]
+
+# Forget a panel (and remove its device) this long after it ended; the portal deletes it too.
+PANEL_RETENTION_SECONDS = 7 * 86400
+PORTAL_SYNC_SECONDS = 15 * 60
+DISCONNECTED_ISSUE_AFTER = 15 * 60

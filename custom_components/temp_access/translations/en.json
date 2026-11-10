@@ -21,11 +21,134 @@
       "already_configured": "This home is already connected."
     }
   },
+  "config_subentries": {
+    "panel": {
+      "entry_type": "Guest panel",
+      "initiate_flow": {
+        "user": "Add guest panel"
+      },
+      "step": {
+        "user": {
+          "title": "New guest panel",
+          "description": "The guest gets a link and a PIN to control the chosen entities for the chosen time. You will set up each entity in the next steps.",
+          "data": {
+            "title": "Title",
+            "entities": "Entities for the guest",
+            "start": "Access starts",
+            "duration": "Duration",
+            "days": "Only on days",
+            "time_from": "From",
+            "time_to": "To",
+            "pin": "PIN",
+            "language": "Guest page language"
+          },
+          "data_description": {
+            "title": "Shown to the guest, e.g. Access for Mark.",
+            "start": "Empty means: from now.",
+            "days": "Empty means: every day.",
+            "time_from": "Access hours on each allowed day. Empty means: all day.",
+            "time_to": "May be earlier than the start, e.g. overnight 22:00–6:00.",
+            "pin": "4–8 digits. Empty means: random 4 digits."
+          }
+        },
+        "control": {
+          "title": "Control {index} of {total}: {entity}",
+          "description": "How should the guest control `{entity_id}`?",
+          "data": {
+            "name": "Name for the guest",
+            "type": "Kind",
+            "action": "Button action",
+            "pulse_seconds": "Pulse length",
+            "max_uses": "Use limit"
+          },
+          "data_description": {
+            "type": "A switch has On and Off buttons. A button must be held for a second, e.g. for a gate.",
+            "action": "Only used for the Button kind.",
+            "pulse_seconds": "For the Pulse action: how long the entity stays on.",
+            "max_uses": "Empty means: no limit."
+          }
+        }
+      },
+      "error": {
+        "no_entities": "Choose at least one entity.",
+        "too_many": "A panel can have at most 20 controls.",
+        "bad_duration": "Duration must be at least one minute.",
+        "bad_pin": "The PIN must have 4 to 8 digits.",
+        "hours_pair": "Set both hours (from and to), or neither.",
+        "hours_equal": "The from and to hours must differ.",
+        "bad_dates": "The panel must end in the future.",
+        "portal_error": "The portal refused the panel. Check the HA log.",
+        "cannot_connect": "Cannot reach the portal. Try again in a moment.",
+        "bad_domain": "This entity cannot be shared with guests.",
+        "not_found": "The entity does not exist.",
+        "button_only": "This entity can only be a button.",
+        "bad_action": "Choose what the button does."
+      },
+      "abort": {
+        "not_loaded": "The integration is not running. Check the portal connection."
+      }
+    }
+  },
   "entity": {
     "binary_sensor": {
       "connection": {
         "name": "Portal connection"
       }
+    },
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "active": "Active",
+          "not_started": "Not started",
+          "outside_schedule": "Outside hours",
+          "expired": "Expired",
+          "revoked": "Revoked",
+          "locked": "Locked (wrong PIN)"
+        },
+        "state_attributes": {
+          "valid_from": {
+            "name": "Valid from"
+          },
+          "failed_pin_attempts": {
+            "name": "Wrong PINs"
+          },
+          "days": {
+            "name": "Days"
+          },
+          "hours": {
+            "name": "Hours"
+          }
+        }
+      },
+      "valid_until": {
+        "name": "Valid until"
+      },
+      "link": {
+        "name": "Link"
+      },
+      "pin": {
+        "name": "PIN"
+      },
+      "last_action": {
+        "name": "Last guest action"
+      }
+    },
+    "button": {
+      "revoke": {
+        "name": "Revoke"
+      }
+    },
+    "image": {
+      "qr": {
+        "name": "QR code"
+      }
+    }
+  },
+  "issues": {
+    "disconnected": {
+      "title": "No connection to the access portal",
+      "description": "“{name}” has not been able to reach the portal {url} for over 15 minutes. Guests cannot control devices right now. Check the internet connection; the integration keeps retrying."
     }
   },
   "selector": {
@@ -38,6 +161,28 @@
         "fri": "Friday",
         "sat": "Saturday",
         "sun": "Sunday"
+      }
+    },
+    "language": {
+      "options": {
+        "pl": "Polski",
+        "en": "English"
+      }
+    },
+    "control_type": {
+      "options": {
+        "switch": "Switch (On / Off)",
+        "button": "Button (hold to activate)"
+      }
+    },
+    "button_action": {
+      "options": {
+        "press": "Press",
+        "run": "Run",
+        "unlock": "Unlock",
+        "open": "Open",
+        "toggle": "Toggle",
+        "pulse": "Pulse (on for a moment)"
       }
     }
   },
