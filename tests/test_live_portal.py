@@ -22,7 +22,7 @@ from custom_components.temp_access.const import DOMAIN, EVENT_COMMAND
 from custom_components.temp_access.hub import schedule_allows
 
 PORTAL = os.environ.get("PORTAL_URL", "http://127.0.0.1:8787")
-ADMIN = os.environ.get("ADMIN_TOKEN", "dev-admin-token")
+ADMIN = os.environ.get("ADMIN_TOKEN", "dev-admin-token-0123456789")
 
 
 @pytest.fixture(autouse=True)
