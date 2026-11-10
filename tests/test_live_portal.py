@@ -120,7 +120,7 @@ async def settle(hass: HomeAssistant, entry, sensor: str):
     return hub
 
 
-async def test_full_flow_against_live_portal(hass: HomeAssistant, monkeypatch) -> None:
+async def test_full_flow_against_live_portal(hass: HomeAssistant, monkeypatch, hass_ws_client) -> None:
     from custom_components.temp_access import hub as hub_mod
 
     monkeypatch.setattr(hub_mod, "DISCONNECTED_ISSUE_AFTER", 0.5)
@@ -307,6 +307,43 @@ async def test_full_flow_against_live_portal(hass: HomeAssistant, monkeypatch) -
             await hass.services.async_call(DOMAIN, "create_panel", {"title": "x", "controls": [{"entity_id": "sensor.foo"}]}, blocking=True, return_response=True)
         with pytest.raises(Exception, match="not found"):
             await hass.services.async_call(DOMAIN, "create_panel", {"title": "x", "controls": [{"entity_id": "light.nope"}]}, blocking=True, return_response=True)
+
+        # ---------- sidebar page: panel registered, WebSocket commands ----------
+        assert "guest-access" in hass.data["frontend_panels"]
+        assert hass.data["frontend_panels"]["guest-access"].require_admin
+        client = await hass_ws_client(hass)
+        await client.send_json({"id": 1, "type": "temp_access/list"})
+        res = await client.receive_json()
+        assert res["success"], res
+        lst = res["result"]
+        assert lst["entries"][0]["connected"] is True and "input_boolean" in lst["domains"] and lst["actions"]["lock"] == ["unlock", "open"]
+        by_title = {p["title"]: p for p in lst["panels"]}
+        assert set(by_title) >= {"Z formularza", "Blokada"}
+        zf = by_title["Z formularza"]
+        assert zf["status"] == "revoked" and zf["entities"]["qr"] and zf["controls"][1]["type"] == "button" and zf["last_action"]["result"] == "ok"
+
+        # create through call_service with a response, as the page does
+        await client.send_json({"id": 2, "type": "call_service", "domain": DOMAIN, "service": "create_panel", "return_response": True,
+                                "service_data": {"title": "Ze strony", "duration": {"days": 0, "hours": 3, "minutes": 0}, "notify": False,
+                                                 "valid_from": dt_util.now().replace(tzinfo=None).isoformat(timespec="minutes"),
+                                                 "days": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"], "time_from": "00:00", "time_to": "23:59",
+                                                 "controls": [{"entity_id": "input_boolean.przekaznik", "type": "button", "action": "pulse", "pulse_seconds": 0.5, "max_uses": 3}]}})
+        res = await client.receive_json()
+        assert res["success"], res
+        page_pid = res["result"]["response"]["panel_id"]
+        hub = await settle(hass, entry, sensor)
+        assert hub.panels[page_pid]["controls"]["ctrl_1"]["pulse_seconds"] == 0.5
+
+        client = await hass_ws_client(hass)  # the reload does not drop it, but start clean
+        await client.send_json({"id": 3, "type": "temp_access/revoke", "panel_id": page_pid})
+        res = await client.receive_json()
+        assert res["success"] and res["result"]["status"] == "revoked", res
+        await client.send_json({"id": 4, "type": "temp_access/revoke", "panel_id": "nope"})
+        assert (await client.receive_json())["error"]["code"] == "not_found"
+        await client.send_json({"id": 5, "type": "temp_access/delete", "panel_id": page_pid})
+        assert (await client.receive_json())["success"]
+        hub = await settle(hass, entry, sensor)
+        assert page_pid not in hub.panels
 
         # ---------- restart keeps everything ----------
         last_seq = hub.data["last_seq"]

@@ -16,7 +16,15 @@ Stan: **etap 4**. Panele tworzy się formularzem w interfejsie HA albo akcją `t
 
 *Ustawienia → Urządzenia i usługi → Dodaj integrację → Temporary Access.* Podaj adres portalu, kod zaproszenia i nazwę domu. Po chwili encja **Połączenie z portalem** powinna pokazać stan *Połączono*.
 
-## Tworzenie panelu w interfejsie
+## Strona „Dostęp gości” w menu bocznym
+
+Integracja dodaje do lewego menu HA pozycję **Dostęp gości** (widoczną tylko dla administratorów). Na tej stronie:
+
+- widzisz wszystkie panele: status, czas do końca, kontrolki z liczbą użyć, ostatnią akcję gościa i błędne PIN-y,
+- przy każdym panelu: pokaż kod QR, kopiuj link, pokaż i kopiuj PIN, unieważnij, usuń,
+- przycisk **Nowy panel** otwiera formularz na tej samej stronie, a po utworzeniu od razu pokazuje link, PIN i kod QR.
+
+## Tworzenie panelu w ustawieniach integracji
 
 *Ustawienia → Urządzenia i usługi → Temporary Access* → przycisk **Dodaj panel gościa** (przy wpisie integracji, menu ⋮ albo przycisk na górze listy wpisów).
 

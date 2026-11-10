@@ -174,6 +174,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     hass.services.async_register(DOMAIN, "create_panel", create_panel, schema=CREATE_PANEL_SCHEMA, supports_response=SupportsResponse.OPTIONAL)
     hass.services.async_register(DOMAIN, "revoke_panel", revoke_panel, schema=REVOKE_PANEL_SCHEMA)
+
+    from . import websocket
+
+    websocket.async_register(hass)
     return True
 
 
@@ -182,6 +186,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     api = PortalApi(session, entry.data[CONF_PORTAL_URL], entry.data[CONF_API_KEY])
     hub = AccessHub(hass, entry, api, session, entry.data[CONF_INSTANCE_ID])
     await hub.async_load()
+    from .frontend import async_register_panel
+
+    await async_register_panel(hass)
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = hub
 
     # Panels whose subentry the user deleted: revoke them on the portal, then forget them.
