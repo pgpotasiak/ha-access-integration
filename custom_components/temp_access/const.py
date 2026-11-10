@@ -26,6 +26,7 @@ EVENT_COMMAND = f"{DOMAIN}_command"
 
 TYPE_SWITCH = "switch"
 TYPE_BUTTON = "button"
+TYPE_SENSOR = "sensor"  # read-only: the guest sees the value
 
 # Domains a guest may control, and how.
 SWITCH_DOMAINS = {"light", "switch", "fan", "input_boolean", "cover", "valve", "siren"}
@@ -44,7 +45,15 @@ BUTTON_DEFAULT_ACTION = {
     "siren": "pulse",
 }
 BUTTON_ACTIONS = {"press", "run", "unlock", "open", "toggle", "pulse"}
-ALLOWED_DOMAINS = SWITCH_DOMAINS | set(BUTTON_DEFAULT_ACTION)
+CONTROL_DOMAINS = SWITCH_DOMAINS | set(BUTTON_DEFAULT_ACTION)
+# Entities whose value a guest may see. People, trackers and cameras are left out on purpose.
+READ_ONLY_DOMAINS = {"sensor", "binary_sensor", "input_number", "input_select", "input_text", "counter", "number", "select"}
+READ_DOMAINS = READ_ONLY_DOMAINS | CONTROL_DOMAINS - {"button", "input_button", "script", "scene"}
+ALLOWED_DOMAINS = CONTROL_DOMAINS | READ_DOMAINS
+
+# At most one value update per control per this many seconds (keeps the portal within free limits).
+STATE_THROTTLE_SENSOR = 30
+STATE_THROTTLE_CONTROL = 2
 DEFAULT_PULSE_SECONDS = 1.0
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]

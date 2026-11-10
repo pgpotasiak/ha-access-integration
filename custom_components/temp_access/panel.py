@@ -13,6 +13,9 @@ from homeassistant.util import dt as dt_util
 from .api import PortalConnectionError, PortalError
 from .const import (
     ALLOWED_DOMAINS,
+    CONTROL_DOMAINS,
+    READ_DOMAINS,
+    TYPE_SENSOR,
     BUTTON_ACTIONS,
     BUTTON_DEFAULT_ACTION,
     STATUS_ACTIVE,
@@ -36,7 +39,10 @@ class PanelError(Exception):
 
 
 def default_type(entity_id: str) -> str:
-    return TYPE_SWITCH if entity_id.split(".", 1)[0] in SWITCH_DOMAINS else TYPE_BUTTON
+    domain = entity_id.split(".", 1)[0]
+    if domain not in CONTROL_DOMAINS:
+        return TYPE_SENSOR
+    return TYPE_SWITCH if domain in SWITCH_DOMAINS else TYPE_BUTTON
 
 
 def build_controls(hass: HomeAssistant, items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -55,6 +61,10 @@ def build_controls(hass: HomeAssistant, items: list[dict[str, Any]]) -> dict[str
         if state is None:
             raise PanelError(f"{entity_id}: entity not found", "not_found")
         ctype = c.get("type") or default_type(entity_id)
+        if ctype == TYPE_SENSOR and domain not in READ_DOMAINS:
+            raise PanelError(f"{entity_id}: '{domain}' has no value to show", "not_readable")
+        if ctype != TYPE_SENSOR and domain not in CONTROL_DOMAINS:
+            raise PanelError(f"{entity_id}: '{domain}' can only be shown, not controlled", "read_only")
         if ctype == TYPE_SWITCH and domain not in SWITCH_DOMAINS:
             raise PanelError(f"{entity_id}: '{domain}' can only be a button", "button_only")
         action = None
@@ -63,7 +73,7 @@ def build_controls(hass: HomeAssistant, items: list[dict[str, Any]]) -> dict[str
             if action not in BUTTON_ACTIONS:
                 raise PanelError(f"{entity_id}: choose an action for this button", "bad_action")
         name = (c.get("name") or state.attributes.get("friendly_name") or entity_id).strip()[:40]
-        max_uses = c.get("max_uses")
+        max_uses = c.get("max_uses") if ctype != TYPE_SENSOR else None
         controls[f"ctrl_{i}"] = {
             "entity_id": entity_id,
             "name": name,
@@ -71,6 +81,7 @@ def build_controls(hass: HomeAssistant, items: list[dict[str, Any]]) -> dict[str
             "action": action,
             "pulse_seconds": c.get("pulse_seconds"),
             "max_uses": int(max_uses) if max_uses else None,
+            "show_state": ctype == TYPE_SENSOR or bool(c.get("show_state")),
         }
     return controls
 
@@ -116,7 +127,13 @@ async def async_create_on_portal(
         "valid_from": valid_from.isoformat(),
         "valid_until": valid_until.isoformat(),
         "controls": [
-            {"id": cid, "name": c["name"], "type": c["type"], **({"max_uses": c["max_uses"]} if c["max_uses"] else {})}
+            {
+                "id": cid,
+                "name": c["name"],
+                "type": c["type"],
+                "show_state": bool(c.get("show_state")),
+                **({"max_uses": c["max_uses"]} if c["max_uses"] else {}),
+            }
             for cid, c in controls.items()
         ],
     }

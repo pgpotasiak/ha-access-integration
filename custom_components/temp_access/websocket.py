@@ -13,7 +13,7 @@ from homeassistant.helpers import entity_registry as er
 
 from .api import PortalConnectionError, PortalError
 from .config_flow import ACTIONS_BY_DOMAIN
-from .const import ALLOWED_DOMAINS, DOMAIN, SWITCH_DOMAINS
+from .const import ALLOWED_DOMAINS, CONTROL_DOMAINS, DOMAIN, READ_DOMAINS, SWITCH_DOMAINS
 from .hub import AccessHub
 
 
@@ -73,6 +73,7 @@ def ws_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
                             "action": c.get("action"),
                             "max_uses": c.get("max_uses"),
                             "uses": rt["uses"].get(cid, 0),
+                            "show_state": bool(c.get("show_state")),
                         }
                         for cid, c in p["controls"].items()
                     ],
@@ -92,6 +93,8 @@ def ws_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg
             "panels": panels,
             "domains": sorted(ALLOWED_DOMAINS),
             "switch_domains": sorted(SWITCH_DOMAINS),
+            "control_domains": sorted(CONTROL_DOMAINS),
+            "read_domains": sorted(READ_DOMAINS),
             "actions": ACTIONS_BY_DOMAIN,
         },
     )

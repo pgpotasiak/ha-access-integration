@@ -48,7 +48,8 @@
             "days": "Empty means: every day.",
             "time_from": "Access hours on each allowed day. Empty means: all day.",
             "time_to": "May be earlier than the start, e.g. overnight 22:00–6:00.",
-            "pin": "4–8 digits. Empty means: random 4 digits."
+            "pin": "4–8 digits. Empty means: random 4 digits.",
+            "entities": "Devices to control and sensors whose value the guest should see (e.g. a temperature)."
           }
         },
         "control": {
@@ -59,13 +60,22 @@
             "type": "Kind",
             "action": "Button action",
             "pulse_seconds": "Pulse length",
-            "max_uses": "Use limit"
+            "max_uses": "Use limit",
+            "show_state": "Show the state to the guest"
           },
           "data_description": {
-            "type": "A switch has On and Off buttons. A button must be held for a second, e.g. for a gate.",
+            "type": "A switch has On and Off buttons. A button must be held for a second, e.g. for a gate. A read-out only shows the state, without control.",
             "action": "Only used for the Button kind.",
             "pulse_seconds": "For the Pulse action: how long the entity stays on.",
-            "max_uses": "Empty means: no limit."
+            "max_uses": "Empty means: no limit. Not used for read-outs.",
+            "show_state": "The guest sees e.g. “State: on” above the buttons."
+          }
+        },
+        "control_read": {
+          "title": "Control {index} of {total}: {entity}",
+          "description": "The guest sees the current value of `{entity_id}` (e.g. a temperature), without any control.",
+          "data": {
+            "name": "Name for the guest"
           }
         }
       },
@@ -82,7 +92,9 @@
         "bad_domain": "This entity cannot be shared with guests.",
         "not_found": "The entity does not exist.",
         "button_only": "This entity can only be a button.",
-        "bad_action": "Choose what the button does."
+        "bad_action": "Choose what the button does.",
+        "not_readable": "This entity cannot be shown to a guest.",
+        "read_only": "This entity can only be shown, not controlled."
       },
       "abort": {
         "not_loaded": "The integration is not running. Check the portal connection."
@@ -172,7 +184,8 @@
     "control_type": {
       "options": {
         "switch": "Switch (On / Off)",
-        "button": "Button (hold to activate)"
+        "button": "Button (hold to activate)",
+        "sensor": "Read-out (state only)"
       }
     },
     "button_action": {
@@ -197,7 +210,7 @@
         },
         "controls": {
           "name": "Controls",
-          "description": "List of entities: entity_id, optional name, type (switch/button), action (press, run, unlock, open, toggle, pulse), pulse_seconds, max_uses."
+          "description": "List of entities: entity_id, optional name, type (switch/button/sensor), action (press, run, unlock, open, toggle, pulse), pulse_seconds, max_uses, show_state."
         },
         "pin": {
           "name": "PIN",

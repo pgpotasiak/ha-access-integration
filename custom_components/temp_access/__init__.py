@@ -31,6 +31,7 @@ from .const import (
     PANEL_RETENTION_SECONDS,
     SUBENTRY_PANEL,
     TYPE_BUTTON,
+    TYPE_SENSOR,
     TYPE_SWITCH,
 )
 from .hub import AccessHub
@@ -47,7 +48,8 @@ CONTROL_SCHEMA = vol.Schema(
     {
         vol.Required("entity_id"): cv.entity_id,
         vol.Optional("name"): vol.All(cv.string, vol.Length(min=1, max=40)),
-        vol.Optional("type"): vol.In([TYPE_SWITCH, TYPE_BUTTON]),
+        vol.Optional("type"): vol.In([TYPE_SWITCH, TYPE_BUTTON, TYPE_SENSOR]),
+        vol.Optional("show_state"): cv.boolean,
         vol.Optional("action"): vol.In(sorted(BUTTON_ACTIONS)),
         vol.Optional("pulse_seconds"): vol.All(vol.Coerce(float), vol.Range(min=0.2, max=30)),
         vol.Optional("max_uses"): vol.All(vol.Coerce(int), vol.Range(min=1, max=1000)),

@@ -48,7 +48,8 @@
             "days": "Puste oznacza: codziennie.",
             "time_from": "Godziny dostępu w każdy dozwolony dzień. Puste oznacza: całą dobę.",
             "time_to": "Może być wcześniej niż godzina początku, np. dostęp nocny 22:00–6:00.",
-            "pin": "4–8 cyfr. Puste oznacza: losowe 4 cyfry."
+            "pin": "4–8 cyfr. Puste oznacza: losowe 4 cyfry.",
+            "entities": "Urządzenia do sterowania oraz czujniki, których wartość gość ma widzieć (np. temperatura)."
           }
         },
         "control": {
@@ -59,13 +60,22 @@
             "type": "Rodzaj",
             "action": "Działanie przycisku",
             "pulse_seconds": "Długość impulsu",
-            "max_uses": "Limit użyć"
+            "max_uses": "Limit użyć",
+            "show_state": "Pokaż gościowi stan"
           },
           "data_description": {
-            "type": "Przełącznik ma przyciski Włącz i Wyłącz. Przycisk wymaga przytrzymania przez sekundę, np. dla bramy.",
+            "type": "Przełącznik ma przyciski Włącz i Wyłącz. Przycisk wymaga przytrzymania przez sekundę, np. dla bramy. Odczyt tylko pokazuje stan, bez sterowania.",
             "action": "Dotyczy tylko rodzaju Przycisk.",
             "pulse_seconds": "Dla działania Impuls: jak długo encja ma być włączona.",
-            "max_uses": "Puste oznacza: bez limitu."
+            "max_uses": "Puste oznacza: bez limitu. Nie dotyczy odczytu.",
+            "show_state": "Gość zobaczy np. „Stan: włączone” nad przyciskami."
+          }
+        },
+        "control_read": {
+          "title": "Kontrolka {index} z {total}: {entity}",
+          "description": "Gość zobaczy aktualną wartość encji `{entity_id}` (np. temperaturę), bez możliwości sterowania.",
+          "data": {
+            "name": "Nazwa dla gościa"
           }
         }
       },
@@ -82,7 +92,9 @@
         "bad_domain": "Tej encji nie można udostępnić gościom.",
         "not_found": "Encja nie istnieje.",
         "button_only": "Ta encja może być tylko przyciskiem.",
-        "bad_action": "Wybierz działanie przycisku."
+        "bad_action": "Wybierz działanie przycisku.",
+        "not_readable": "Tej encji nie można pokazać gościowi.",
+        "read_only": "Tę encję można tylko pokazać, nie sterować nią."
       },
       "abort": {
         "not_loaded": "Integracja nie jest uruchomiona. Sprawdź połączenie z portalem."
@@ -172,7 +184,8 @@
     "control_type": {
       "options": {
         "switch": "Przełącznik (Włącz / Wyłącz)",
-        "button": "Przycisk (przytrzymaj, aby uruchomić)"
+        "button": "Przycisk (przytrzymaj, aby uruchomić)",
+        "sensor": "Odczyt (tylko podgląd stanu)"
       }
     },
     "button_action": {
@@ -197,7 +210,7 @@
         },
         "controls": {
           "name": "Kontrolki",
-          "description": "Lista encji: entity_id, opcjonalnie name, type (switch/button), action (press, run, unlock, open, toggle, pulse), pulse_seconds, max_uses."
+          "description": "Lista encji: entity_id, opcjonalnie name, type (switch/button/sensor), action (press, run, unlock, open, toggle, pulse), pulse_seconds, max_uses, show_state."
         },
         "pin": {
           "name": "PIN",

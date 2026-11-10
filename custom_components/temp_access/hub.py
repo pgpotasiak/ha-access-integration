@@ -13,10 +13,10 @@ from typing import Any
 import aiohttp
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import CALLBACK_TYPE, Context, HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, Context, Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_call_later, async_track_time_interval
+from homeassistant.helpers.event import async_call_later, async_track_state_change_event, async_track_time_interval
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
@@ -40,8 +40,11 @@ from .const import (
     STATUS_NOT_STARTED,
     STATUS_OUTSIDE,
     STATUS_REVOKED,
+    STATE_THROTTLE_CONTROL,
+    STATE_THROTTLE_SENSOR,
     STORAGE_VERSION,
     SUBENTRY_PANEL,
+    TYPE_SENSOR,
     TYPE_SWITCH,
 )
 
@@ -71,6 +74,10 @@ class AccessHub:
         self._unsubs: list[CALLBACK_TYPE] = []
         self._issue_timer: CALLBACK_TYPE | None = None
         self._statuses: dict[str, str] = {}
+        # Values shown to guests: entity_id -> [(panel_id, control_id)], plus throttling state.
+        self._watched: dict[str, list[tuple[str, str]]] = {}
+        self._last_sent: dict[tuple[str, str], float] = {}
+        self._pending_send: dict[tuple[str, str], CALLBACK_TYPE] = {}
 
     # ---------------- panels ----------------
 
@@ -142,12 +149,81 @@ class AccessHub:
         self._unsubs.append(async_track_time_interval(self.hass, self._tick, timedelta(seconds=30)))
         self._unsubs.append(async_track_time_interval(self.hass, self._sync_from_portal, timedelta(seconds=PORTAL_SYNC_SECONDS)))
         self._schedule_issue()
+        self._watch_states()
+
+    # ---------------- values shown to guests ----------------
+
+    @callback
+    def _watch_states(self) -> None:
+        self._watched = {}
+        for pid, p in self.panels.items():
+            if self.status(pid) in (STATUS_EXPIRED, STATUS_REVOKED):
+                continue
+            for cid, c in p["controls"].items():
+                if c.get("type") == TYPE_SENSOR or c.get("show_state"):
+                    self._watched.setdefault(c["entity_id"], []).append((pid, cid))
+        if self._watched:
+            self._unsubs.append(async_track_state_change_event(self.hass, list(self._watched), self._on_state_change))
+
+    @callback
+    def _on_state_change(self, event: Event[EventStateChangedData]) -> None:
+        for pid, cid in self._watched.get(event.data["entity_id"], []):
+            self._queue_state(pid, cid)
+
+    @callback
+    def _queue_state(self, panel_id: str, control_id: str) -> None:
+        """Send now, or once at the end of the throttle window (latest value wins)."""
+        key = (panel_id, control_id)
+        if key in self._pending_send:
+            return
+        control = self.panels.get(panel_id, {}).get("controls", {}).get(control_id, {})
+        throttle = STATE_THROTTLE_SENSOR if control.get("type") == TYPE_SENSOR else STATE_THROTTLE_CONTROL
+        wait = self._last_sent.get(key, 0) + throttle - time.monotonic()
+        if wait <= 0:
+            self.hass.async_create_task(self._send_state(panel_id, control_id))
+            return
+
+        @callback
+        def _later(_now: datetime) -> None:
+            self._pending_send.pop(key, None)
+            self.hass.async_create_task(self._send_state(panel_id, control_id))
+
+        self._pending_send[key] = async_call_later(self.hass, wait, _later)
+
+    async def _send_state(self, panel_id: str, control_id: str) -> None:
+        ws = self._ws
+        control = self.panels.get(panel_id, {}).get("controls", {}).get(control_id)
+        if ws is None or ws.closed or control is None:
+            return
+        st = self.hass.states.get(control["entity_id"])
+        msg = {
+            "type": "state",
+            "panel_id": panel_id,
+            "control_id": control_id,
+            "state": st.state if st else None,
+            "unit": st.attributes.get("unit_of_measurement") if st else None,
+            "device_class": st.attributes.get("device_class") if st else None,
+            "domain": control["entity_id"].split(".", 1)[0],
+        }
+        self._last_sent[(panel_id, control_id)] = time.monotonic()
+        try:
+            await ws.send_str(json.dumps(msg))
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Could not send state: %s", err)
+
+    async def _send_all_states(self) -> None:
+        for pairs in self._watched.values():
+            for pid, cid in pairs:
+                await self._send_state(pid, cid)
 
     async def stop(self) -> None:
         self._stopping = True
         for unsub in self._unsubs:
             unsub()
         self._unsubs.clear()
+        for cancel in self._pending_send.values():
+            cancel()
+        self._pending_send.clear()
         if self._issue_timer:
             self._issue_timer()
             self._issue_timer = None
@@ -298,6 +374,7 @@ class AccessHub:
             self._set_connected(True)
             _LOGGER.info("Connected to the access portal")
             self.hass.async_create_task(self._sync_from_portal())
+            self.hass.async_create_task(self._send_all_states())
         elif kind == "command":
             seq = int(msg.get("seq", 0))
             if seq <= int(self.data.get("last_seq", 0)):
@@ -333,6 +410,8 @@ class AccessHub:
         if control.get("max_uses") is not None and uses >= control["max_uses"]:
             return panel, control, "limit_reached"
         action = msg.get("action")
+        if control["type"] == TYPE_SENSOR:
+            return panel, control, "not_allowed"
         if control["type"] == TYPE_SWITCH and action not in ("on", "off"):
             return panel, control, "not_allowed"
         if control["type"] != TYPE_SWITCH and action != "press":

@@ -25,6 +25,8 @@ from .api import PortalApi, PortalConnectionError, PortalError
 from .const import (
     ALLOWED_DOMAINS,
     BUTTON_DEFAULT_ACTION,
+    CONTROL_DOMAINS,
+    READ_DOMAINS,
     CONF_API_KEY,
     CONF_INSTANCE_ID,
     CONF_INVITE_CODE,
@@ -36,6 +38,7 @@ from .const import (
     SUBENTRY_PANEL,
     SWITCH_DOMAINS,
     TYPE_BUTTON,
+    TYPE_SENSOR,
     TYPE_SWITCH,
 )
 from .panel import PanelError, async_create_on_portal, build_controls, build_schedule, default_type
@@ -175,7 +178,8 @@ class PanelSubentryFlow(ConfigSubentryFlow):
                     "type": ctype,
                     "action": (user_input.get("action") or actions[0]) if ctype == TYPE_BUTTON else None,
                     "pulse_seconds": user_input.get("pulse_seconds"),
-                    "max_uses": int(user_input["max_uses"]) if user_input.get("max_uses") else None,
+                    "max_uses": int(user_input["max_uses"]) if user_input.get("max_uses") and ctype != TYPE_SENSOR else None,
+                    "show_state": bool(user_input.get("show_state")),
                 }
             )
             if len(self._controls) < len(self._entities):
@@ -188,27 +192,35 @@ class PanelSubentryFlow(ConfigSubentryFlow):
             errors["base"] = result
 
         fields: dict[Any, Any] = {vol.Optional("name", default=friendly[:40]): sel.TextSelector()}
-        if domain in SWITCH_DOMAINS:
-            fields[vol.Required("type", default=default_type(entity_id))] = sel.SelectSelector(
-                sel.SelectSelectorConfig(options=[TYPE_SWITCH, TYPE_BUTTON], translation_key="control_type", mode=sel.SelectSelectorMode.LIST)
-            )
-        if len(actions) > 1:
-            fields[vol.Required("action", default=actions[0])] = sel.SelectSelector(
-                sel.SelectSelectorConfig(options=actions, translation_key="button_action")
-            )
-        if "pulse" in actions:
-            fields[vol.Optional("pulse_seconds", default=DEFAULT_PULSE_SECONDS)] = sel.NumberSelector(
-                sel.NumberSelectorConfig(min=0.2, max=30, step=0.1, unit_of_measurement="s", mode=sel.NumberSelectorMode.BOX)
-            )
-        fields[vol.Optional("max_uses")] = sel.NumberSelector(sel.NumberSelectorConfig(min=1, max=1000, step=1, mode=sel.NumberSelectorMode.BOX))
+        if domain in CONTROL_DOMAINS:
+            kinds = ([TYPE_SWITCH] if domain in SWITCH_DOMAINS else []) + [TYPE_BUTTON] + ([TYPE_SENSOR] if domain in READ_DOMAINS else [])
+            if len(kinds) > 1:
+                fields[vol.Required("type", default=default_type(entity_id))] = sel.SelectSelector(
+                    sel.SelectSelectorConfig(options=kinds, translation_key="control_type", mode=sel.SelectSelectorMode.LIST)
+                )
+            if len(actions) > 1:
+                fields[vol.Required("action", default=actions[0])] = sel.SelectSelector(
+                    sel.SelectSelectorConfig(options=actions, translation_key="button_action")
+                )
+            if "pulse" in actions:
+                fields[vol.Optional("pulse_seconds", default=DEFAULT_PULSE_SECONDS)] = sel.NumberSelector(
+                    sel.NumberSelectorConfig(min=0.2, max=30, step=0.1, unit_of_measurement="s", mode=sel.NumberSelectorMode.BOX)
+                )
+            fields[vol.Optional("max_uses")] = sel.NumberSelector(sel.NumberSelectorConfig(min=1, max=1000, step=1, mode=sel.NumberSelectorMode.BOX))
+            if domain in READ_DOMAINS:
+                fields[vol.Optional("show_state", default=False)] = sel.BooleanSelector()
 
         return self.async_show_form(
-            step_id="control",
+            step_id="control" if domain in CONTROL_DOMAINS else "control_read",
             data_schema=vol.Schema(fields),
             errors=errors,
             description_placeholders={"entity": friendly, "entity_id": entity_id, "index": str(index + 1), "total": str(len(self._entities))},
             last_step=index + 1 == len(self._entities),
         )
+
+    async def async_step_control_read(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
+        """Same as the control step, for entities a guest can only look at."""
+        return await self.async_step_control(user_input)
 
     async def _async_finish(self) -> SubentryFlowResult | str:
         entry = self._get_entry()

@@ -22,7 +22,9 @@ const T = {
     none: "gość jeszcze nic nie robił",
     failedPin: n => `Błędne PIN-y: ${n}`,
     uses: (u, m) => `${u}/${m} użyć`,
-    type: { switch: "przełącznik", button: "przycisk" },
+    type: { switch: "przełącznik", button: "przycisk", sensor: "odczyt" },
+    withState: "z podglądem stanu",
+    fShowState: "Pokaż gościowi stan",
     qr: "Kod QR", hideQr: "Ukryj kod QR",
     copyLink: "Kopiuj link", copyPin: "Kopiuj PIN", showPin: "Pokaż PIN",
     copied: "Skopiowano",
@@ -37,7 +39,7 @@ const T = {
     fControls: "Ustawienia kontrolek",
     fName: "Nazwa dla gościa", fType: "Rodzaj", fAction: "Działanie", fPulse: "Impuls (s)", fLimit: "Limit użyć", fLimitPh: "bez limitu",
     actions: { press: "Naciśnij", run: "Uruchom", unlock: "Odblokuj", open: "Otwórz", toggle: "Przełącz", pulse: "Impuls" },
-    typeLong: { switch: "Przełącznik (Włącz / Wyłącz)", button: "Przycisk (przytrzymaj)" },
+    typeLong: { switch: "Przełącznik (Włącz / Wyłącz)", button: "Przycisk (przytrzymaj)", sensor: "Odczyt (tylko podgląd)" },
     fWhen: "Czas dostępu",
     fStart: "Początek", fStartHint: "puste = od teraz",
     fDuration: "Czas trwania", d: "dni", h: "godz.", m: "min",
@@ -74,7 +76,9 @@ const T = {
     none: "the guest has not done anything yet",
     failedPin: n => `Wrong PINs: ${n}`,
     uses: (u, m) => `${u}/${m} uses`,
-    type: { switch: "switch", button: "button" },
+    type: { switch: "switch", button: "button", sensor: "read-out" },
+    withState: "with state",
+    fShowState: "Show the state to the guest",
     qr: "QR code", hideQr: "Hide QR code",
     copyLink: "Copy link", copyPin: "Copy PIN", showPin: "Show PIN",
     copied: "Copied",
@@ -88,7 +92,7 @@ const T = {
     fControls: "Control settings",
     fName: "Name for the guest", fType: "Kind", fAction: "Action", fPulse: "Pulse (s)", fLimit: "Use limit", fLimitPh: "no limit",
     actions: { press: "Press", run: "Run", unlock: "Unlock", open: "Open", toggle: "Toggle", pulse: "Pulse" },
-    typeLong: { switch: "Switch (On / Off)", button: "Button (hold)" },
+    typeLong: { switch: "Switch (On / Off)", button: "Button (hold)", sensor: "Read-out (state only)" },
     fWhen: "Access time",
     fStart: "Start", fStartHint: "empty = now",
     fDuration: "Duration", d: "days", h: "hours", m: "min",
@@ -305,7 +309,7 @@ class TempAccessPanel extends HTMLElement {
     const f = this._form, key = el.dataset.f;
     if (el.dataset.i !== undefined) {
       const c = f.selected[Number(el.dataset.i)];
-      c[key] = el.value;
+      c[key] = el.type === "checkbox" ? el.checked : el.value;
       if (key === "type" || key === "action") this._render();
       return;
     }
@@ -328,7 +332,8 @@ class TempAccessPanel extends HTMLElement {
     const dom = this._domain(entity_id);
     const actions = this._data.actions[dom] || ["press"];
     const name = (this._hass.states[entity_id]?.attributes.friendly_name || entity_id).slice(0, 40);
-    return { entity_id, name, type: this._data.switch_domains.includes(dom) ? "switch" : "button", action: actions[0], pulse: "1", limit: "" };
+    const type = !this._data.control_domains.includes(dom) ? "sensor" : this._data.switch_domains.includes(dom) ? "switch" : "button";
+    return { entity_id, name, type, action: actions[0], pulse: "1", limit: "", show: false };
   }
 
   _candidates() {
@@ -360,7 +365,8 @@ class TempAccessPanel extends HTMLElement {
         const o = { entity_id: c.entity_id, name: (c.name || "").trim() || undefined, type: c.type };
         if (c.type === "button") o.action = c.action;
         if (c.type === "button" && c.action === "pulse" && c.pulse) o.pulse_seconds = Number(c.pulse);
-        if (c.limit) o.max_uses = Number(c.limit);
+        if (c.limit && c.type !== "sensor") o.max_uses = Number(c.limit);
+        if (c.show && c.type !== "sensor") o.show_state = true;
         return o;
       }),
     };
@@ -428,7 +434,7 @@ class TempAccessPanel extends HTMLElement {
       ? `${t.starts}: <b>${esc(this._date(p.valid_from))}</b>`
       : `${t.until}: <b>${esc(this._date(p.valid_until))}</b>${endedP ? "" : ` · ${t.left} ${esc(this._left(p.valid_until))}`}`;
     const sched = this._schedule(p.schedule);
-    const controls = p.controls.map(c => `<li>${esc(c.name)} <span class="muted">· ${t.type[c.type]}${c.max_uses ? ` · ${t.uses(c.uses, c.max_uses)}` : ""}</span></li>`).join("");
+    const controls = p.controls.map(c => `<li>${esc(c.name)} <span class="muted">· ${t.type[c.type] || c.type}${c.show_state && c.type !== "sensor" ? ` · ${t.withState}` : ""}${c.max_uses ? ` · ${t.uses(c.uses, c.max_uses)}` : ""}</span></li>`).join("");
     const qrState = p.entities.qr && this._hass.states[p.entities.qr];
     const qrOpen = this._qrOpen.has(id) && qrState?.attributes.entity_picture;
     const pinOpen = this._pinOpen.has(id);
@@ -480,16 +486,20 @@ class TempAccessPanel extends HTMLElement {
       const dom = this._domain(c.entity_id);
       const actions = d.actions[dom] || ["press"];
       const canSwitch = d.switch_domains.includes(dom);
+      const canControl = d.control_domains.includes(dom);
+      const canRead = d.read_domains.includes(dom);
+      const kinds = [...(canSwitch ? ["switch"] : []), ...(canControl ? ["button"] : []), ...(canRead ? ["sensor"] : [])];
       return `
         <div class="ctrl">
           <div class="ctrl-h"><b>${esc(c.entity_id)}</b><button type="button" class="quiet small" data-a="pick" data-id="${esc(c.entity_id)}">✕</button></div>
           <div class="grid">
             <label>${t.fName}<input data-f="name" data-i="${i}" value="${esc(c.name)}" maxlength="40"></label>
-            ${canSwitch ? `<label>${t.fType}<select data-f="type" data-i="${i}">${["switch", "button"].map(o => `<option value="${o}" ${c.type === o ? "selected" : ""}>${t.typeLong[o]}</option>`).join("")}</select></label>` : ""}
+            ${kinds.length > 1 ? `<label>${t.fType}<select data-f="type" data-i="${i}">${kinds.map(o => `<option value="${o}" ${c.type === o ? "selected" : ""}>${t.typeLong[o]}</option>`).join("")}</select></label>` : `<label>${t.fType}<input value="${t.typeLong[c.type]}" disabled></label>`}
             ${c.type === "button" && actions.length > 1 ? `<label>${t.fAction}<select data-f="action" data-i="${i}">${actions.map(o => `<option value="${o}" ${c.action === o ? "selected" : ""}>${t.actions[o]}</option>`).join("")}</select></label>` : ""}
             ${c.type === "button" && c.action === "pulse" ? `<label>${t.fPulse}<input type="number" min="0.2" max="30" step="0.1" data-f="pulse" data-i="${i}" value="${esc(c.pulse)}"></label>` : ""}
-            <label>${t.fLimit}<input type="number" min="1" max="1000" step="1" data-f="limit" data-i="${i}" value="${esc(c.limit)}" placeholder="${t.fLimitPh}"></label>
+            ${c.type !== "sensor" ? `<label>${t.fLimit}<input type="number" min="1" max="1000" step="1" data-f="limit" data-i="${i}" value="${esc(c.limit)}" placeholder="${t.fLimitPh}"></label>` : ""}
           </div>
+          ${c.type !== "sensor" && canRead ? `<label class="check"><input type="checkbox" data-f="show" data-i="${i}" ${c.show ? "checked" : ""}> ${t.fShowState}</label>` : ""}
         </div>`;
     }).join("");
     return `
@@ -626,6 +636,8 @@ legend{font-size:13px;color:var(--secondary-text-color);padding:0;margin-bottom:
 .pick .box{flex:none;width:20px;height:20px;border:2px solid var(--divider-color);border-radius:4px;display:grid;place-items:center;font-size:13px}
 .pick span span{display:block}
 .pname{font-size:14px}
+label.check{flex-direction:row;align-items:center;gap:8px;margin-top:10px;font-size:14px;color:var(--primary-text-color)}
+label.check input{width:18px;min-height:18px;height:18px;margin:0;accent-color:var(--primary-color)}
 .ctrl{border:1px solid var(--divider-color);border-radius:8px;padding:10px 12px;margin-bottom:8px}
 .ctrl-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13px}
 .ctrl-h button{min-height:28px;padding:0 8px}

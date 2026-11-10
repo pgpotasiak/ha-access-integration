@@ -124,6 +124,8 @@ async def test_full_flow_against_live_portal(hass: HomeAssistant, monkeypatch, h
     from custom_components.temp_access import hub as hub_mod
 
     monkeypatch.setattr(hub_mod, "DISCONNECTED_ISSUE_AFTER", 0.5)
+    monkeypatch.setattr(hub_mod, "STATE_THROTTLE_SENSOR", 1.0)
+    monkeypatch.setattr(hub_mod, "STATE_THROTTLE_CONTROL", 0.2)
     async with aiohttp.ClientSession() as s:
         st, _ = await _json(s, "GET", "/")
         if st != 200:
@@ -304,9 +306,74 @@ async def test_full_flow_against_live_portal(hass: HomeAssistant, monkeypatch, h
 
         # ---------- validation errors from the action ----------
         with pytest.raises(Exception, match="cannot be shared"):
-            await hass.services.async_call(DOMAIN, "create_panel", {"title": "x", "controls": [{"entity_id": "sensor.foo"}]}, blocking=True, return_response=True)
+            await hass.services.async_call(DOMAIN, "create_panel", {"title": "x", "controls": [{"entity_id": "camera.foo"}]}, blocking=True, return_response=True)
         with pytest.raises(Exception, match="not found"):
             await hass.services.async_call(DOMAIN, "create_panel", {"title": "x", "controls": [{"entity_id": "light.nope"}]}, blocking=True, return_response=True)
+
+        # ---------- values shown to guests (read-outs and switch state) ----------
+        temp_attrs = {"unit_of_measurement": "°C", "device_class": "temperature", "friendly_name": "Temperatura salon"}
+        hass.states.async_set("sensor.temperatura", "21.4", temp_attrs)
+        sens = await hass.services.async_call(
+            DOMAIN, "create_panel",
+            {"title": "Czujniki", "controls": [{"entity_id": "sensor.temperatura"}, {"entity_id": "input_boolean.garaz", "show_state": True}, {"entity_id": "input_boolean.przekaznik"}]},
+            blocking=True, return_response=True,
+        )
+        hub = await settle(hass, entry, sensor)
+        ctl = hub.panels[sens["panel_id"]]["controls"]
+        assert ctl["ctrl_1"]["type"] == "sensor" and ctl["ctrl_1"]["show_state"] and ctl["ctrl_2"]["show_state"] and not ctl["ctrl_3"]["show_state"]
+        gs = Guest(s, sens["panel_url"])
+        assert (await gs.call("POST", "unlock", {"pin": sens["pin"]}))[0] == 200
+
+        async def values():
+            _, d = await gs.call("GET", "state")
+            return {c["id"]: c.get("state", "hidden") for c in d["controls"]}
+
+        async def wait_value(cid, want, timeout=8):
+            end = time.monotonic() + timeout
+            v = None
+            while time.monotonic() < end:
+                v = (await values())[cid]
+                if v and v != "hidden" and v.get("state") == want:
+                    return v
+                await asyncio.sleep(0.2)
+            raise AssertionError(f"{cid} never became {want}: {v}")
+
+        v = await wait_value("ctrl_1", "21.4")
+        assert v["unit"] == "°C" and v["device_class"] == "temperature" and v["domain"] == "sensor"
+        assert (await wait_value("ctrl_2", "off"))["domain"] == "input_boolean"
+        assert (await values())["ctrl_3"] == "hidden", "state of a control without show_state must not reach the portal"
+
+        # Updates are throttled but the latest value always arrives.
+        for x in ("21.6", "21.8", "22.0"):
+            hass.states.async_set("sensor.temperatura", x, temp_attrs)
+        await wait_value("ctrl_1", "22.0")
+        await gs.press("ctrl_2", "on", "done")
+        await wait_value("ctrl_2", "on")
+
+        r = await gs.call("POST", "press", {"control_id": "ctrl_1", "action": "press"})
+        assert r[0] == 400, "a read-out cannot be pressed"
+        with pytest.raises(Exception, match="only be shown"):
+            await hass.services.async_call(DOMAIN, "create_panel", {"title": "x", "controls": [{"entity_id": "sensor.temperatura", "type": "button"}]}, blocking=True, return_response=True)
+
+        # Values are sent again after a reconnect.
+        await hub._ws.close()
+        assert await wait_for(lambda: hass.states.get(sensor).state == "on", timeout=10)
+        hass.states.async_set("sensor.temperatura", "19.5", temp_attrs)
+        await wait_value("ctrl_1", "19.5")
+
+        # UI form: a sensor gets the read-only step.
+        flow = await hass.config_entries.subentries.async_init((entry.entry_id, "panel"), context={"source": "user"})
+        step = await hass.config_entries.subentries.async_configure(
+            flow["flow_id"], {"title": "Formularz z czujnikiem", "entities": ["sensor.temperatura", "input_boolean.garaz"], "duration": {"days": 0, "hours": 1, "minutes": 0}, "language": "pl"}
+        )
+        assert step["step_id"] == "control_read"
+        step = await hass.config_entries.subentries.async_configure(flow["flow_id"], {"name": "Salon"})
+        assert step["step_id"] == "control" and "show_state" in str(step["data_schema"].schema)
+        done = await hass.config_entries.subentries.async_configure(flow["flow_id"], {"name": "Garaż", "type": "switch", "show_state": True})
+        assert done["type"] == "create_entry", done
+        hub = await settle(hass, entry, sensor)
+        fp = next(p for p in hub.panels.values() if p["title"] == "Formularz z czujnikiem")
+        assert fp["controls"]["ctrl_1"]["type"] == "sensor" and fp["controls"]["ctrl_2"]["show_state"] is True
 
         # ---------- sidebar page: panel registered, WebSocket commands ----------
         assert "guest-access" in hass.data["frontend_panels"]
@@ -317,6 +384,8 @@ async def test_full_flow_against_live_portal(hass: HomeAssistant, monkeypatch, h
         assert res["success"], res
         lst = res["result"]
         assert lst["entries"][0]["connected"] is True and "input_boolean" in lst["domains"] and lst["actions"]["lock"] == ["unlock", "open"]
+        assert "sensor" in lst["read_domains"] and "sensor" not in lst["control_domains"] and "sensor" in lst["domains"]
+        assert any(c["show_state"] for p in lst["panels"] for c in p["controls"])
         by_title = {p["title"]: p for p in lst["panels"]}
         assert set(by_title) >= {"Z formularza", "Blokada"}
         zf = by_title["Z formularza"]
